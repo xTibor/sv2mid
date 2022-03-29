@@ -218,21 +218,25 @@ impl SvPlayParameters {
             "piano" => 0,
             "elecpiano" => 5,
             "organ" => 17,
-            "bass" => 32,
             "beep" => 80,
-            // Percussion sounds mapped to some random MIDI instruments until
-            // MIDI drum channel support gets implemented.
-            "bounce" => 127,
-            "clap" => 118,
-            "click" => 117,
-            "cowbell" => 112,
-            "hihat" => 117,
-            "kick" => 117,
+            _ => 0,
+        })
+    }
+
+    pub fn drum_note(&self) -> u7 {
+        u7::from(match self.clip_id.as_str() {
+            "bass" => 35,
+            "bounce" => 27,
+            "clap" => 39,
+            "click" => 33,
+            "cowbell" => 56,
+            "hihat" => 42,
+            "kick" => 41,
             "silent" => 0,
-            "snare" => 117,
-            "stick" => 115,
-            "strike" => 127,
-            "tap" => 127,
+            "snare" => 38,
+            "stick" => 30,
+            "strike" => 49,
+            "tap" => 32,
             _ => 0,
         })
     }

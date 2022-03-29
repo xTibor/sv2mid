@@ -12,6 +12,7 @@ use crate::sv_model::SvDocument;
 
 const MIDI_TICKS_PER_BEAT: usize = 1024;
 const MIDI_DRUM_CHANNEL: usize = 9;
+const MIDI_DRUM_NOTE_LENGTH: usize = MIDI_TICKS_PER_BEAT / 4;
 
 #[derive(Debug, Parser)]
 #[clap(author, version)]
@@ -42,13 +43,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter(|layer| layer.r#type == "notes")
         .enumerate()
         .map(|(channel_index, notes_layer)| {
-            // Skip drum channel
+            // Skip drum channel when assigning MIDI channels to notes layers.
             if channel_index < MIDI_DRUM_CHANNEL {
                 (channel_index, notes_layer)
             } else {
                 (channel_index + 1, notes_layer)
             }
         })
+        .collect::<Vec<_>>();
+
+    let sv_instants_layer = sv_document
+        .data
+        .layers
+        .iter()
+        .filter(|layer| layer.r#type == "timeinstants")
         .collect::<Vec<_>>();
 
     let mut midi_document = midly::Smf::new(midly::Header::new(
@@ -125,6 +133,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
             });
         }
+
+        // TODO: Drum channel initialization
+        // The drum channel is constructed by merging multiple time instant layers.
+        // It's not obvious how should channel volume/panning be initialized.
+        // I'm leaving it as default for now.
     }
 
     // Emitting MIDI track data
@@ -136,9 +149,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             note_on: bool,
         }
 
-        let mut absolute_midi_events = sv_notes_layers
-            .iter()
-            .flat_map(|&(channel_index, notes_layer)| {
+        let seconds_to_ticks = |seconds: f64| -> usize {
+            (seconds * (midi_bpm / 60.0) * MIDI_TICKS_PER_BEAT as f64) as usize
+        };
+
+        let mut absolute_midi_events = Vec::new();
+
+        absolute_midi_events.extend(sv_notes_layers.iter().flat_map(
+            |&(channel_index, notes_layer)| {
                 let model = sv_document
                     .get_model_by_id(notes_layer.model)
                     .expect("notes layer doesn't have model specified");
@@ -160,10 +178,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
                     let length_seconds = (duration as f64) / (model.sample_rate as f64);
 
-                    let seconds_to_ticks = |seconds: f64| -> usize {
-                        (seconds * (midi_bpm / 60.0) * MIDI_TICKS_PER_BEAT as f64) as usize
-                    };
-
                     [
                         // Note on event
                         AbsoluteMidiEvent {
@@ -181,8 +195,46 @@ fn main() -> Result<(), Box<dyn Error>> {
                         },
                     ]
                 })
+            },
+        ));
+
+        absolute_midi_events.extend(sv_instants_layer.iter().flat_map(|&instants_layer| {
+            let model = sv_document
+                .get_model_by_id(instants_layer.model)
+                .expect("instants layer doesn't have model specified");
+
+            let dataset_id = model.dataset.expect("model doesn't have dataset specified");
+            let dataset = sv_document
+                .get_dataset_by_id(dataset_id)
+                .expect("dataset doesn't exist");
+
+            let play_parameters = sv_document
+                .get_play_parameters_by_id(instants_layer.model)
+                .expect("failed to find play parameters");
+
+            let key = play_parameters.drum_note().as_int() as usize;
+
+            dataset.points.iter().flat_map(move |point| {
+                let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
+
+                [
+                    // Note on event
+                    AbsoluteMidiEvent {
+                        channel_index: MIDI_DRUM_CHANNEL,
+                        key,
+                        ticks: seconds_to_ticks(offset_seconds),
+                        note_on: true,
+                    },
+                    // Note off event
+                    AbsoluteMidiEvent {
+                        channel_index: MIDI_DRUM_CHANNEL,
+                        key,
+                        ticks: seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH,
+                        note_on: false,
+                    },
+                ]
             })
-            .collect::<Vec<_>>();
+        }));
 
         absolute_midi_events.sort_by_key(
             |&AbsoluteMidiEvent {
