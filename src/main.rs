@@ -14,6 +14,7 @@ const MIDI_TICKS_PER_BEAT: usize = 1024;
 const MIDI_DRUM_CHANNEL: usize = 9;
 const MIDI_DRUM_NOTE_LENGTH: usize = MIDI_TICKS_PER_BEAT / 4;
 
+/// A less broken MIDI-exporter for Sonic Visualiser
 #[derive(Debug, Parser)]
 #[clap(author, version)]
 struct Args {
