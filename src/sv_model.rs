@@ -169,6 +169,9 @@ pub struct SvLayer {
 
     #[xml(attr = "model")]
     pub model: usize,
+
+    #[xml(attr = "presentationName")]
+    pub presentation_name: Option<String>,
     // TODO: Other properties
 }
 

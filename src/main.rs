@@ -88,7 +88,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             midi_track.push(midly::TrackEvent {
                 delta: u28::from(0),
                 kind: midly::TrackEventKind::Meta(midly::MetaMessage::InstrumentName(
-                    notes_layer.name.as_bytes(),
+                    notes_layer
+                        .presentation_name
+                        .as_ref()
+                        .unwrap_or(&notes_layer.name)
+                        .as_bytes(),
                 )),
             });
 
