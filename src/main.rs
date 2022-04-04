@@ -88,11 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             midi_track.push(midly::TrackEvent {
                 delta: u28::from(0),
                 kind: midly::TrackEventKind::Meta(midly::MetaMessage::InstrumentName(
-                    notes_layer
-                        .presentation_name
-                        .as_ref()
-                        .unwrap_or(&notes_layer.name)
-                        .as_bytes(),
+                    notes_layer.midi_name().as_bytes(),
                 )),
             });
 
@@ -182,6 +178,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
                     let length_seconds = (duration as f64) / (model.sample_rate as f64);
+
+                    // There's a bug in Sonic Visualiser when accidentally right clicking
+                    // while drawing notes it creates an additional imploded note next to the
+                    // drawn note. These imploded notes fuck up MIDI import in DAWs.
+                    // Just warn about these issues, better fix them in the source project
+                    // than here.
+                    if duration <= 1 {
+                        eprintln!(
+                            "warning: imploded note on layer '{}' at {:.2}s",
+                            notes_layer.midi_name(),
+                            offset_seconds
+                        );
+                    }
 
                     [
                         // Note on event

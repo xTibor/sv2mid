@@ -244,3 +244,13 @@ impl SvPlayParameters {
         })
     }
 }
+
+impl SvLayer {
+    pub fn midi_name(&self) -> &str {
+        if let Some(presentation_name) = &self.presentation_name {
+            presentation_name
+        } else {
+            &self.name
+        }
+    }
+}
