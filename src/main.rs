@@ -143,20 +143,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Emitting MIDI track data
     {
-        struct AbsoluteMidiEvent {
-            channel_index: usize,
-            key: usize,
+        struct AbsoluteTrackEvent<'a> {
             ticks: usize,
-            note_on: bool,
+            kind: midly::TrackEventKind<'a>,
         }
 
         let seconds_to_ticks = |seconds: f64| -> usize {
             (seconds * (midi_bpm / 60.0) * MIDI_TICKS_PER_BEAT as f64) as usize
         };
 
-        let mut absolute_midi_events = Vec::new();
+        let mut absolute_track_events = Vec::new();
 
-        absolute_midi_events.extend(sv_notes_layers.iter().flat_map(
+        absolute_track_events.extend(sv_notes_layers.iter().flat_map(
             |&(channel_index, notes_layer)| {
                 let model = sv_document
                     .get_model_by_id(notes_layer.model)
@@ -194,25 +192,33 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     [
                         // Note on event
-                        AbsoluteMidiEvent {
-                            channel_index,
-                            key,
+                        AbsoluteTrackEvent {
                             ticks: seconds_to_ticks(offset_seconds),
-                            note_on: true,
+                            kind: midly::TrackEventKind::Midi {
+                                channel: u4::from(channel_index as u8),
+                                message: midly::MidiMessage::NoteOn {
+                                    key: u7::from(key as u8),
+                                    vel: u7::from(64 as u8),
+                                },
+                            },
                         },
                         // Note off event
-                        AbsoluteMidiEvent {
-                            channel_index,
-                            key,
+                        AbsoluteTrackEvent {
                             ticks: seconds_to_ticks(offset_seconds + length_seconds),
-                            note_on: false,
+                            kind: midly::TrackEventKind::Midi {
+                                channel: u4::from(channel_index as u8),
+                                message: midly::MidiMessage::NoteOff {
+                                    key: u7::from(key as u8),
+                                    vel: u7::from(0 as u8),
+                                },
+                            },
                         },
                     ]
                 })
             },
         ));
 
-        absolute_midi_events.extend(sv_instants_layers.iter().flat_map(|&instants_layer| {
+        absolute_track_events.extend(sv_instants_layers.iter().flat_map(|&instants_layer| {
             let model = sv_document
                 .get_model_by_id(instants_layer.model)
                 .expect("instants layer doesn't have model specified");
@@ -233,41 +239,37 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 [
                     // Note on event
-                    AbsoluteMidiEvent {
-                        channel_index: MIDI_DRUM_CHANNEL,
-                        key,
+                    AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds),
-                        note_on: true,
+                        kind: midly::TrackEventKind::Midi {
+                            channel: u4::from(MIDI_DRUM_CHANNEL as u8),
+                            message: midly::MidiMessage::NoteOn {
+                                key: u7::from(key as u8),
+                                vel: u7::from(64 as u8),
+                            },
+                        },
                     },
                     // Note off event
-                    AbsoluteMidiEvent {
-                        channel_index: MIDI_DRUM_CHANNEL,
-                        key,
+                    AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH,
-                        note_on: false,
+                        kind: midly::TrackEventKind::Midi {
+                            channel: u4::from(MIDI_DRUM_CHANNEL as u8),
+                            message: midly::MidiMessage::NoteOff {
+                                key: u7::from(key as u8),
+                                vel: u7::from(0 as u8),
+                            },
+                        },
                     },
                 ]
             })
         }));
 
-        absolute_midi_events.sort_by_key(
-            |&AbsoluteMidiEvent {
-                 channel_index,
-                 key,
-                 ticks,
-                 note_on,
-             }| {
-                // Rationale behind this sorting key:
-                // - ticks: Interleave the channels and sort events by occurrence.
-                // - note_on: When multiple events occur at the same time, emit the
-                //     note off events first before any new note on events.
-                // - channel_index: Make sorting results reproducible.
-                // - key: Make sorting results reproducible.
-                (ticks, note_on, channel_index, key)
-            },
-        );
+        absolute_track_events.sort_by_key(|&AbsoluteTrackEvent { ticks, .. }| {
+            // TODO: "Note off" events before "Note on" events
+            ticks
+        });
 
-        for (event_index, event) in absolute_midi_events.iter().enumerate() {
+        for (event_index, event) in absolute_track_events.iter().enumerate() {
             let delta_time = if event_index == 0 {
                 if args.trim_leading_silence {
                     0
@@ -275,33 +277,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                     event.ticks
                 }
             } else {
-                absolute_midi_events[event_index].ticks
-                    - absolute_midi_events[event_index - 1].ticks
+                let ticks_before = absolute_track_events[event_index - 1].ticks;
+                let ticks_current = absolute_track_events[event_index].ticks;
+                assert!(ticks_before <= ticks_current);
+                ticks_current - ticks_before
             };
 
-            if event.note_on {
-                midi_track.push(midly::TrackEvent {
-                    delta: u28::from(delta_time as u32),
-                    kind: midly::TrackEventKind::Midi {
-                        channel: u4::from(event.channel_index as u8),
-                        message: midly::MidiMessage::NoteOn {
-                            key: u7::from(event.key as u8),
-                            vel: u7::from(64 as u8),
-                        },
-                    },
-                });
-            } else {
-                midi_track.push(midly::TrackEvent {
-                    delta: u28::from(delta_time as u32),
-                    kind: midly::TrackEventKind::Midi {
-                        channel: u4::from(event.channel_index as u8),
-                        message: midly::MidiMessage::NoteOff {
-                            key: u7::from(event.key as u8),
-                            vel: u7::from(0 as u8),
-                        },
-                    },
-                });
-            }
+            midi_track.push(midly::TrackEvent {
+                delta: u28::from(delta_time as u32),
+                kind: event.kind,
+            });
         }
 
         midi_track.push(midly::TrackEvent {
