@@ -82,10 +82,10 @@ pub struct SvModel {
     pub value_quantization: Option<usize>,
 
     #[xml(attr = "minimum")]
-    pub minimum: Option<usize>,
+    pub minimum: Option<f64>,
 
     #[xml(attr = "maximum")]
-    pub maximum: Option<usize>,
+    pub maximum: Option<f64>,
 
     #[xml(attr = "units")]
     pub units: Option<String>,
