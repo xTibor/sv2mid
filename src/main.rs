@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use midly::num::{u15, u24, u28, u4, u7};
-use midly::MetaMessage;
 
 mod sv_model;
 use crate::sv_model::SvDocument;
@@ -79,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         midi_track.push(midly::TrackEvent {
             delta: u28::from(0),
-            kind: midly::TrackEventKind::Meta(MetaMessage::Tempo(u24::from(
+            kind: midly::TrackEventKind::Meta(midly::MetaMessage::Tempo(u24::from(
                 (60_000_000.0 / midi_bpm) as u32,
             ))),
         });
@@ -284,20 +283,35 @@ fn main() -> Result<(), Box<dyn Error>> {
             dataset.points.iter().flat_map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
 
-                [
-                    AbsoluteTrackEvent {
-                        ticks: seconds_to_ticks(offset_seconds),
-                        kind: midly::TrackEventKind::Meta(midly::MetaMessage::Text(
-                            point.label.as_bytes()
-                        )),
-                    },
-                ]
+                [AbsoluteTrackEvent {
+                    ticks: seconds_to_ticks(offset_seconds),
+                    kind: midly::TrackEventKind::Meta(midly::MetaMessage::Text(
+                        point.label.as_bytes(),
+                    )),
+                }]
             })
         }));
 
-        absolute_track_events.sort_by_key(|&AbsoluteTrackEvent { ticks, .. }| {
-            // TODO: "Note off" events before "Note on" events
-            ticks
+        absolute_track_events.sort_by_key(|&AbsoluteTrackEvent { ticks, kind }| {
+            let is_note_off_event = matches!(
+                kind,
+                midly::TrackEventKind::Midi {
+                    message: midly::MidiMessage::NoteOff { .. },
+                    ..
+                }
+            );
+
+            let is_note_on_event = matches!(
+                kind,
+                midly::TrackEventKind::Midi {
+                    message: midly::MidiMessage::NoteOn { .. },
+                    ..
+                }
+            );
+
+            // Sort by time, then NoteOff -> NoteOn -> other events.
+            // TODO: This sorting key is not exhaustive, may cause reproducibility issues
+            (ticks, !is_note_off_event, !is_note_on_event)
         });
 
         for (event_index, event) in absolute_track_events.iter().enumerate() {
