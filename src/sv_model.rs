@@ -198,10 +198,6 @@ impl SvDocument {
         Ok(SvDocument::from_str(&xml_data)?)
     }
 
-    pub fn get_layer_by_id(&self, id: usize) -> Option<&SvLayer> {
-        self.data.layers.iter().find(|layer| layer.id == id)
-    }
-
     pub fn get_model_by_id(&self, id: usize) -> Option<&SvModel> {
         self.data.models.iter().find(|model| model.id == id)
     }

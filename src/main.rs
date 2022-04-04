@@ -204,7 +204,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 channel: u4::from(channel_index as u8),
                                 message: midly::MidiMessage::NoteOn {
                                     key: u7::from(key as u8),
-                                    vel: u7::from(64 as u8),
+                                    vel: u7::from(64),
                                 },
                             },
                         },
@@ -215,7 +215,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 channel: u4::from(channel_index as u8),
                                 message: midly::MidiMessage::NoteOff {
                                     key: u7::from(key as u8),
-                                    vel: u7::from(0 as u8),
+                                    vel: u7::from(0),
                                 },
                             },
                         },
@@ -251,7 +251,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             channel: u4::from(MIDI_DRUM_CHANNEL as u8),
                             message: midly::MidiMessage::NoteOn {
                                 key: u7::from(key as u8),
-                                vel: u7::from(64 as u8),
+                                vel: u7::from(64),
                             },
                         },
                     },
@@ -262,7 +262,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             channel: u4::from(MIDI_DRUM_CHANNEL as u8),
                             message: midly::MidiMessage::NoteOff {
                                 key: u7::from(key as u8),
-                                vel: u7::from(0 as u8),
+                                vel: u7::from(0),
                             },
                         },
                     },
