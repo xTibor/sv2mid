@@ -60,6 +60,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter(|layer| layer.r#type == "timeinstants")
         .collect::<Vec<_>>();
 
+    let sv_text_layers = sv_document
+        .data
+        .layers
+        .iter()
+        .filter(|layer| layer.r#type == "text")
+        .collect::<Vec<_>>();
+
     let mut midi_document = midly::Smf::new(midly::Header::new(
         midly::Format::SingleTrack,
         midly::Timing::Metrical(u15::from(MIDI_TICKS_PER_BEAT as u16)),
@@ -259,6 +266,30 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 vel: u7::from(0 as u8),
                             },
                         },
+                    },
+                ]
+            })
+        }));
+
+        absolute_track_events.extend(sv_text_layers.iter().flat_map(|&text_layer| {
+            let model = sv_document
+                .get_model_by_id(text_layer.model)
+                .expect("text layer doesn't have model specified");
+
+            let dataset_id = model.dataset.expect("model doesn't have dataset specified");
+            let dataset = sv_document
+                .get_dataset_by_id(dataset_id)
+                .expect("dataset doesn't exist");
+
+            dataset.points.iter().flat_map(move |point| {
+                let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
+
+                [
+                    AbsoluteTrackEvent {
+                        ticks: seconds_to_ticks(offset_seconds),
+                        kind: midly::TrackEventKind::Meta(midly::MetaMessage::Text(
+                            point.label.as_bytes()
+                        )),
                     },
                 ]
             })

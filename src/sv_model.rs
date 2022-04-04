@@ -153,6 +153,9 @@ pub struct SvPoint {
 
     #[xml(attr = "label")]
     pub label: String,
+
+    #[xml(attr = "height")]
+    pub height: Option<f64>,
 }
 
 #[derive(Debug, XmlRead)]
