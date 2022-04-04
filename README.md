@@ -9,6 +9,7 @@ A less broken MIDI-exporter for Sonic Visualiser.
 - Channel muting/panning support
 - Channel naming support
 - Drum channel for instant layers
+- MIDI text event support
 - MIDI tempo support
 - Leading silence trimming
 
