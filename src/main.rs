@@ -303,6 +303,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 });
             }
         }
+
+        midi_track.push(midly::TrackEvent {
+            delta: u28::from(0),
+            kind: midly::TrackEventKind::Meta(midly::MetaMessage::EndOfTrack),
+        });
     }
 
     midi_document.tracks.push(midi_track);
