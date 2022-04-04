@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         .collect::<Vec<_>>();
 
-    let sv_instants_layer = sv_document
+    let sv_instants_layers = sv_document
         .data
         .layers
         .iter()
@@ -212,7 +212,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             },
         ));
 
-        absolute_midi_events.extend(sv_instants_layer.iter().flat_map(|&instants_layer| {
+        absolute_midi_events.extend(sv_instants_layers.iter().flat_map(|&instants_layer| {
             let model = sv_document
                 .get_model_by_id(instants_layer.model)
                 .expect("instants layer doesn't have model specified");
