@@ -217,7 +217,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .get_play_parameters_by_id(instants_layer.model)
                 .expect("failed to find play parameters");
 
-            let key = play_parameters.drum_note().as_int() as usize;
+            let key = play_parameters.midi_drum_note().as_int() as usize;
 
             dataset.points.iter().flat_map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);

@@ -226,7 +226,7 @@ impl SvPlayParameters {
         })
     }
 
-    pub fn drum_note(&self) -> u7 {
+    pub fn midi_drum_note(&self) -> u7 {
         u7::from(match self.clip_id.as_str() {
             "bass" => 35,
             "bounce" => 27,
