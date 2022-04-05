@@ -48,6 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if sv_document.get_layers_by_type("notes").count() > 15 {
         eprintln!("warning: project has more notes layers than available MIDI channels");
+        eprintln!("note: unassignable layers will be dropped");
     }
 
     let sv_notes_layers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15]
@@ -80,17 +81,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         });
 
         for &(channel, notes_layer) in sv_notes_layers.iter() {
-            midi_track.push(TrackEvent {
-                delta: u28::from(0),
-                kind: TrackEventKind::Meta(MetaMessage::MidiChannel(channel)),
-            });
+            {
+                if !notes_layer.midi_name().is_ascii() {
+                    eprintln!(
+                        "warning: non-ASCII instrument name '{}'",
+                        notes_layer.midi_name(),
+                    );
+                    eprintln!(
+                        "note: these instrument names may be mishandled by other music software"
+                    );
+                }
 
-            midi_track.push(TrackEvent {
-                delta: u28::from(0),
-                kind: TrackEventKind::Meta(MetaMessage::InstrumentName(
-                    notes_layer.midi_name().as_bytes(),
-                )),
-            });
+                midi_track.push(TrackEvent {
+                    delta: u28::from(0),
+                    kind: TrackEventKind::Meta(MetaMessage::MidiChannel(channel)),
+                });
+
+                midi_track.push(TrackEvent {
+                    delta: u28::from(0),
+                    kind: TrackEventKind::Meta(MetaMessage::InstrumentName(
+                        notes_layer.midi_name().as_bytes(),
+                    )),
+                });
+            }
 
             let play_parameters = sv_document
                 .get_play_parameters_by_id(notes_layer.model)
@@ -274,6 +287,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             dataset.points.iter().map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
+
+                if !point.label.is_ascii() {
+                    eprintln!(
+                        "warning: non-ASCII label '{}' on text layer '{}' at {:.2}s",
+                        point.label,
+                        text_layer.midi_name(),
+                        offset_seconds
+                    );
+                    eprintln!("note: these text events may be mishandled by other music software");
+                }
 
                 AbsoluteTrackEvent {
                     ticks: seconds_to_ticks(offset_seconds),
