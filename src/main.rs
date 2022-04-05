@@ -10,8 +10,15 @@ mod sv_model;
 use crate::sv_model::SvDocument;
 
 const MIDI_TICKS_PER_BEAT: usize = 1024;
-const MIDI_DRUM_CHANNEL: usize = 9;
+
+const MIDI_DRUM_CHANNEL: u8 = 9;
 const MIDI_DRUM_NOTE_LENGTH: usize = MIDI_TICKS_PER_BEAT / 4;
+
+const MIDI_VELOCITY_DEFAULT: u8 = 64;
+const MIDI_VELOCITY_NONE: u8 = 0;
+
+const MIDI_CONTROLLER_VOLUME: u8 = 7;
+const MIDI_CONTROLLER_PAN: u8 = 10;
 
 /// A less broken MIDI-exporter for Sonic Visualiser
 #[derive(Debug, Parser)]
@@ -39,14 +46,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sv_notes_layers = sv_document
         .get_layers_by_type("notes")
         .enumerate()
-        .map(|(channel_index, notes_layer)| {
+        .map(|(channel, notes_layer)| (channel as u8, notes_layer))
+        .map(|(channel, notes_layer)| {
             // Skip drum channel when assigning MIDI channels to notes layers.
-            if channel_index < MIDI_DRUM_CHANNEL {
-                (channel_index, notes_layer)
+            if channel < MIDI_DRUM_CHANNEL {
+                (channel, notes_layer)
             } else {
-                (channel_index + 1, notes_layer)
+                (channel + 1, notes_layer)
             }
         })
+        .map(|(channel, notes_layer)| (u4::from(channel), notes_layer))
         .collect::<Vec<_>>();
 
     let sv_instants_layers = sv_document
@@ -72,12 +81,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             ))),
         });
 
-        for &(channel_index, notes_layer) in sv_notes_layers.iter() {
+        for &(channel, notes_layer) in sv_notes_layers.iter() {
             midi_track.push(midly::TrackEvent {
                 delta: u28::from(0),
-                kind: midly::TrackEventKind::Meta(midly::MetaMessage::MidiChannel(u4::from(
-                    channel_index as u8,
-                ))),
+                kind: midly::TrackEventKind::Meta(midly::MetaMessage::MidiChannel(channel)),
             });
 
             midi_track.push(midly::TrackEvent {
@@ -94,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             midi_track.push(midly::TrackEvent {
                 delta: u28::from(0),
                 kind: midly::TrackEventKind::Midi {
-                    channel: u4::from(channel_index as u8),
+                    channel,
                     message: midly::MidiMessage::ProgramChange {
                         program: play_parameters.midi_program(),
                     },
@@ -105,9 +112,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 midi_track.push(midly::TrackEvent {
                     delta: u28::from(0),
                     kind: midly::TrackEventKind::Midi {
-                        channel: u4::from(channel_index as u8),
+                        channel,
                         message: midly::MidiMessage::Controller {
-                            controller: u7::from(7),
+                            controller: u7::from(MIDI_CONTROLLER_VOLUME),
                             value: u7::from(0),
                         },
                     },
@@ -121,9 +128,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             midi_track.push(midly::TrackEvent {
                 delta: u28::from(0),
                 kind: midly::TrackEventKind::Midi {
-                    channel: u4::from(channel_index as u8),
+                    channel,
                     message: midly::MidiMessage::Controller {
-                        controller: u7::from(10),
+                        controller: u7::from(MIDI_CONTROLLER_PAN),
                         value: u7::from((64.0 + (play_parameters.pan * 63.5)) as u8),
                     },
                 },
@@ -149,69 +156,67 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut absolute_track_events = Vec::new();
 
-        absolute_track_events.extend(sv_notes_layers.iter().flat_map(
-            |&(channel_index, notes_layer)| {
-                let model = sv_document
-                    .get_model_by_id(notes_layer.model)
-                    .expect("notes layer doesn't have model specified");
+        absolute_track_events.extend(sv_notes_layers.iter().flat_map(|&(channel, notes_layer)| {
+            let model = sv_document
+                .get_model_by_id(notes_layer.model)
+                .expect("notes layer doesn't have model specified");
 
-                let dataset_id = model.dataset.expect("model doesn't have dataset specified");
-                let dataset = sv_document
-                    .get_dataset_by_id(dataset_id)
-                    .expect("dataset doesn't exist");
+            let dataset_id = model.dataset.expect("model doesn't have dataset specified");
+            let dataset = sv_document
+                .get_dataset_by_id(dataset_id)
+                .expect("dataset doesn't exist");
 
-                dataset.points.iter().flat_map(move |point| {
-                    let key = point
-                        .value
-                        .expect("notes layer point has no value specified");
+            dataset.points.iter().flat_map(move |point| {
+                let key = point
+                    .value
+                    .expect("notes layer point has no value specified");
 
-                    let duration = point
-                        .duration
-                        .expect("notes layer point has no duration specified");
+                let duration = point
+                    .duration
+                    .expect("notes layer point has no duration specified");
 
-                    let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
-                    let length_seconds = (duration as f64) / (model.sample_rate as f64);
+                let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
+                let length_seconds = (duration as f64) / (model.sample_rate as f64);
 
-                    // There's a bug in Sonic Visualiser when accidentally right clicking
-                    // while drawing notes it creates an additional imploded note next to the
-                    // drawn note. These imploded notes fuck up MIDI import in DAWs.
-                    // Just warn about these issues, better fix them in the source project
-                    // than here.
-                    if duration <= 1 {
-                        eprintln!(
-                            "warning: imploded note on layer '{}' at {:.2}s",
-                            notes_layer.midi_name(),
-                            offset_seconds
-                        );
-                    }
+                // There's a bug in Sonic Visualiser when accidentally right clicking
+                // while drawing notes it creates an additional imploded note next to the
+                // drawn note. These imploded notes fuck up MIDI import in DAWs.
+                // Just warn about these issues, better fix them in the source project
+                // than here.
+                if duration <= 1 {
+                    eprintln!(
+                        "warning: imploded note on layer '{}' at {:.2}s",
+                        notes_layer.midi_name(),
+                        offset_seconds
+                    );
+                }
 
-                    [
-                        // Note on event
-                        AbsoluteTrackEvent {
-                            ticks: seconds_to_ticks(offset_seconds),
-                            kind: midly::TrackEventKind::Midi {
-                                channel: u4::from(channel_index as u8),
-                                message: midly::MidiMessage::NoteOn {
-                                    key: u7::from(key as u8),
-                                    vel: u7::from(64),
-                                },
+                [
+                    // Note on event
+                    AbsoluteTrackEvent {
+                        ticks: seconds_to_ticks(offset_seconds),
+                        kind: midly::TrackEventKind::Midi {
+                            channel,
+                            message: midly::MidiMessage::NoteOn {
+                                key: u7::from(key as u8),
+                                vel: u7::from(MIDI_VELOCITY_DEFAULT),
                             },
                         },
-                        // Note off event
-                        AbsoluteTrackEvent {
-                            ticks: seconds_to_ticks(offset_seconds + length_seconds),
-                            kind: midly::TrackEventKind::Midi {
-                                channel: u4::from(channel_index as u8),
-                                message: midly::MidiMessage::NoteOff {
-                                    key: u7::from(key as u8),
-                                    vel: u7::from(0),
-                                },
+                    },
+                    // Note off event
+                    AbsoluteTrackEvent {
+                        ticks: seconds_to_ticks(offset_seconds + length_seconds),
+                        kind: midly::TrackEventKind::Midi {
+                            channel,
+                            message: midly::MidiMessage::NoteOff {
+                                key: u7::from(key as u8),
+                                vel: u7::from(MIDI_VELOCITY_NONE),
                             },
                         },
-                    ]
-                })
-            },
-        ));
+                    },
+                ]
+            })
+        }));
 
         absolute_track_events.extend(sv_instants_layers.iter().flat_map(|&instants_layer| {
             let model = sv_document
@@ -227,7 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .get_play_parameters_by_id(instants_layer.model)
                 .expect("failed to find play parameters");
 
-            let key = play_parameters.midi_drum_note().as_int() as usize;
+            let key = play_parameters.midi_drum_note();
 
             dataset.points.iter().flat_map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
@@ -237,10 +242,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds),
                         kind: midly::TrackEventKind::Midi {
-                            channel: u4::from(MIDI_DRUM_CHANNEL as u8),
+                            channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: midly::MidiMessage::NoteOn {
-                                key: u7::from(key as u8),
-                                vel: u7::from(64),
+                                key,
+                                vel: u7::from(MIDI_VELOCITY_DEFAULT),
                             },
                         },
                     },
@@ -248,10 +253,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH,
                         kind: midly::TrackEventKind::Midi {
-                            channel: u4::from(MIDI_DRUM_CHANNEL as u8),
+                            channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: midly::MidiMessage::NoteOff {
-                                key: u7::from(key as u8),
-                                vel: u7::from(0),
+                                key,
+                                vel: u7::from(MIDI_VELOCITY_NONE),
                             },
                         },
                     },
@@ -269,15 +274,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .get_dataset_by_id(dataset_id)
                 .expect("dataset doesn't exist");
 
-            dataset.points.iter().flat_map(move |point| {
+            dataset.points.iter().map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
 
-                [AbsoluteTrackEvent {
+                AbsoluteTrackEvent {
                     ticks: seconds_to_ticks(offset_seconds),
                     kind: midly::TrackEventKind::Meta(midly::MetaMessage::Text(
                         point.label.as_bytes(),
                     )),
-                }]
+                }
             })
         }));
 
