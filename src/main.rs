@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use midly::num::{u15, u24, u28, u4, u7};
+use midly::{
+    Format, Header, MetaMessage, MidiMessage, Smf, Timing, Track, TrackEvent, TrackEventKind,
+};
 
 mod sv_model;
 use crate::sv_model::SvDocument;
@@ -59,32 +62,32 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let sv_text_layers = sv_document.get_layers_by_type("text").collect::<Vec<_>>();
 
-    let mut midi_document = midly::Smf::new(midly::Header::new(
-        midly::Format::SingleTrack,
-        midly::Timing::Metrical(u15::from(MIDI_TICKS_PER_BEAT as u16)),
+    let mut midi_document = Smf::new(Header::new(
+        Format::SingleTrack,
+        Timing::Metrical(u15::from(MIDI_TICKS_PER_BEAT as u16)),
     ));
 
     let midi_bpm = args.tempo.unwrap_or(120.0);
-    let mut midi_track = midly::Track::new();
+    let mut midi_track = Track::new();
 
     // MIDI track initialization
     {
-        midi_track.push(midly::TrackEvent {
+        midi_track.push(TrackEvent {
             delta: u28::from(0),
-            kind: midly::TrackEventKind::Meta(midly::MetaMessage::Tempo(u24::from(
+            kind: TrackEventKind::Meta(MetaMessage::Tempo(u24::from(
                 (60_000_000.0 / midi_bpm) as u32,
             ))),
         });
 
         for &(channel, notes_layer) in sv_notes_layers.iter() {
-            midi_track.push(midly::TrackEvent {
+            midi_track.push(TrackEvent {
                 delta: u28::from(0),
-                kind: midly::TrackEventKind::Meta(midly::MetaMessage::MidiChannel(channel)),
+                kind: TrackEventKind::Meta(MetaMessage::MidiChannel(channel)),
             });
 
-            midi_track.push(midly::TrackEvent {
+            midi_track.push(TrackEvent {
                 delta: u28::from(0),
-                kind: midly::TrackEventKind::Meta(midly::MetaMessage::InstrumentName(
+                kind: TrackEventKind::Meta(MetaMessage::InstrumentName(
                     notes_layer.midi_name().as_bytes(),
                 )),
             });
@@ -93,22 +96,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .get_play_parameters_by_id(notes_layer.model)
                 .expect("failed to find play parameters");
 
-            midi_track.push(midly::TrackEvent {
+            midi_track.push(TrackEvent {
                 delta: u28::from(0),
-                kind: midly::TrackEventKind::Midi {
+                kind: TrackEventKind::Midi {
                     channel,
-                    message: midly::MidiMessage::ProgramChange {
+                    message: MidiMessage::ProgramChange {
                         program: play_parameters.midi_program(),
                     },
                 },
             });
 
             if play_parameters.mute {
-                midi_track.push(midly::TrackEvent {
+                midi_track.push(TrackEvent {
                     delta: u28::from(0),
-                    kind: midly::TrackEventKind::Midi {
+                    kind: TrackEventKind::Midi {
                         channel,
-                        message: midly::MidiMessage::Controller {
+                        message: MidiMessage::Controller {
                             controller: u7::from(MIDI_CONTROLLER_VOLUME),
                             value: u7::from(0),
                         },
@@ -120,11 +123,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // MIDI range: 0-127, default 100
             }
 
-            midi_track.push(midly::TrackEvent {
+            midi_track.push(TrackEvent {
                 delta: u28::from(0),
-                kind: midly::TrackEventKind::Midi {
+                kind: TrackEventKind::Midi {
                     channel,
-                    message: midly::MidiMessage::Controller {
+                    message: MidiMessage::Controller {
                         controller: u7::from(MIDI_CONTROLLER_PAN),
                         value: u7::from((64.0 + (play_parameters.pan * 63.5)) as u8),
                     },
@@ -142,7 +145,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         struct AbsoluteTrackEvent<'a> {
             ticks: usize,
-            kind: midly::TrackEventKind<'a>,
+            kind: TrackEventKind<'a>,
         }
 
         let seconds_to_ticks = |seconds: f64| -> usize {
@@ -190,9 +193,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note on event
                     AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds),
-                        kind: midly::TrackEventKind::Midi {
+                        kind: TrackEventKind::Midi {
                             channel,
-                            message: midly::MidiMessage::NoteOn {
+                            message: MidiMessage::NoteOn {
                                 key: u7::from(key as u8),
                                 vel: u7::from(MIDI_VELOCITY_DEFAULT),
                             },
@@ -201,9 +204,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note off event
                     AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds + length_seconds),
-                        kind: midly::TrackEventKind::Midi {
+                        kind: TrackEventKind::Midi {
                             channel,
-                            message: midly::MidiMessage::NoteOff {
+                            message: MidiMessage::NoteOff {
                                 key: u7::from(key as u8),
                                 vel: u7::from(MIDI_VELOCITY_NONE),
                             },
@@ -236,9 +239,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note on event
                     AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds),
-                        kind: midly::TrackEventKind::Midi {
+                        kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
-                            message: midly::MidiMessage::NoteOn {
+                            message: MidiMessage::NoteOn {
                                 key,
                                 vel: u7::from(MIDI_VELOCITY_DEFAULT),
                             },
@@ -247,9 +250,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note off event
                     AbsoluteTrackEvent {
                         ticks: seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH,
-                        kind: midly::TrackEventKind::Midi {
+                        kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
-                            message: midly::MidiMessage::NoteOff {
+                            message: MidiMessage::NoteOff {
                                 key,
                                 vel: u7::from(MIDI_VELOCITY_NONE),
                             },
@@ -274,9 +277,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 AbsoluteTrackEvent {
                     ticks: seconds_to_ticks(offset_seconds),
-                    kind: midly::TrackEventKind::Meta(midly::MetaMessage::Text(
-                        point.label.as_bytes(),
-                    )),
+                    kind: TrackEventKind::Meta(MetaMessage::Text(point.label.as_bytes())),
                 }
             })
         }));
@@ -284,16 +285,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         absolute_track_events.sort_by_key(|&AbsoluteTrackEvent { ticks, kind }| {
             let is_note_off_event = matches!(
                 kind,
-                midly::TrackEventKind::Midi {
-                    message: midly::MidiMessage::NoteOff { .. },
+                TrackEventKind::Midi {
+                    message: MidiMessage::NoteOff { .. },
                     ..
                 }
             );
 
             let is_note_on_event = matches!(
                 kind,
-                midly::TrackEventKind::Midi {
-                    message: midly::MidiMessage::NoteOn { .. },
+                TrackEventKind::Midi {
+                    message: MidiMessage::NoteOn { .. },
                     ..
                 }
             );
@@ -317,15 +318,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ticks_current - ticks_before
             };
 
-            midi_track.push(midly::TrackEvent {
+            midi_track.push(TrackEvent {
                 delta: u28::from(delta_time as u32),
                 kind: event.kind,
             });
         }
 
-        midi_track.push(midly::TrackEvent {
+        midi_track.push(TrackEvent {
             delta: u28::from(0),
-            kind: midly::TrackEventKind::Meta(midly::MetaMessage::EndOfTrack),
+            kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
         });
     }
 
