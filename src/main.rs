@@ -43,19 +43,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let sv_document = SvDocument::load(&args.sv_input_path)?;
 
-    let sv_notes_layers = sv_document
-        .get_layers_by_type("notes")
-        .enumerate()
-        .map(|(channel, notes_layer)| (channel as u8, notes_layer))
-        .map(|(channel, notes_layer)| {
-            // Skip drum channel when assigning MIDI channels to notes layers.
-            if channel < MIDI_DRUM_CHANNEL {
-                (channel, notes_layer)
-            } else {
-                (channel + 1, notes_layer)
-            }
-        })
-        .map(|(channel, notes_layer)| (u4::from(channel), notes_layer))
+    if sv_document.get_layers_by_type("notes").count() > 15 {
+        eprintln!("warning: project has more notes layers than available MIDI channels");
+    }
+
+    let sv_notes_layers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15]
+        .into_iter()
+        .map(u4::from)
+        .zip(sv_document.get_layers_by_type("notes"))
         .collect::<Vec<_>>();
 
     let sv_instants_layers = sv_document
