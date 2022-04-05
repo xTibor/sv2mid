@@ -212,6 +212,16 @@ impl SvDocument {
             .iter()
             .find(|play_parameters| play_parameters.model == id)
     }
+
+    pub fn get_layers_by_type<'a>(
+        &'a self,
+        layer_type: &'a str,
+    ) -> impl Iterator<Item = &'a SvLayer> {
+        self.data
+            .layers
+            .iter()
+            .filter(move |layer| layer.r#type == layer_type)
+    }
 }
 
 impl SvPlayParameters {

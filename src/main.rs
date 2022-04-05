@@ -37,10 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sv_document = SvDocument::load(&args.sv_input_path)?;
 
     let sv_notes_layers = sv_document
-        .data
-        .layers
-        .iter()
-        .filter(|layer| layer.r#type == "notes")
+        .get_layers_by_type("notes")
         .enumerate()
         .map(|(channel_index, notes_layer)| {
             // Skip drum channel when assigning MIDI channels to notes layers.
@@ -53,18 +50,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<_>>();
 
     let sv_instants_layers = sv_document
-        .data
-        .layers
-        .iter()
-        .filter(|layer| layer.r#type == "timeinstants")
+        .get_layers_by_type("timeinstants")
         .collect::<Vec<_>>();
 
-    let sv_text_layers = sv_document
-        .data
-        .layers
-        .iter()
-        .filter(|layer| layer.r#type == "text")
-        .collect::<Vec<_>>();
+    let sv_text_layers = sv_document.get_layers_by_type("text").collect::<Vec<_>>();
 
     let mut midi_document = midly::Smf::new(midly::Header::new(
         midly::Format::SingleTrack,
