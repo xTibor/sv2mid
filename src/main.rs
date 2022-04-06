@@ -12,6 +12,9 @@ use midly::{
 mod sv_model;
 use crate::sv_model::SvDocument;
 
+mod midly_ext;
+use crate::midly_ext::TrackEventKindExt;
+
 const MIDI_TICKS_PER_BEAT: usize = 1024;
 
 const MIDI_DRUM_CHANNEL: u8 = 9;
@@ -22,6 +25,8 @@ const MIDI_VELOCITY_NONE: u8 = 0;
 
 const MIDI_CONTROLLER_VOLUME: u8 = 7;
 const MIDI_CONTROLLER_PAN: u8 = 10;
+
+const MIDI_MAX_POLYPHONY: usize = 24;
 
 /// A less broken MIDI-exporter for Sonic Visualiser
 #[derive(Debug, Parser)]
@@ -162,7 +167,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         let seconds_to_ticks = |seconds: f64| -> usize {
-            (seconds * (midi_bpm / 60.0) * MIDI_TICKS_PER_BEAT as f64) as usize
+            (seconds * (midi_bpm / 60.0) * (MIDI_TICKS_PER_BEAT as f64)) as usize
+        };
+
+        let ticks_to_seconds = |ticks: usize| -> f64 {
+            (ticks as f64) / (midi_bpm / 60.0) / (MIDI_TICKS_PER_BEAT as f64)
         };
 
         let mut absolute_track_events = Vec::new();
@@ -306,26 +315,38 @@ fn main() -> Result<(), Box<dyn Error>> {
         }));
 
         absolute_track_events.sort_by_key(|&AbsoluteTrackEvent { ticks, kind }| {
-            let is_note_off_event = matches!(
-                kind,
-                TrackEventKind::Midi {
-                    message: MidiMessage::NoteOff { .. },
-                    ..
-                }
-            );
-
-            let is_note_on_event = matches!(
-                kind,
-                TrackEventKind::Midi {
-                    message: MidiMessage::NoteOn { .. },
-                    ..
-                }
-            );
-
             // Sort by time, then NoteOff -> NoteOn -> other events.
             // TODO: This sorting key is not exhaustive, may cause reproducibility issues
-            (ticks, !is_note_off_event, !is_note_on_event)
+            (ticks, !kind.is_note_off(), !kind.is_note_on())
         });
+
+        {
+            let mut current_polyphony = 0;
+            let mut already_warned = false;
+
+            for event in absolute_track_events.iter() {
+                if event.kind.is_note_on() {
+                    current_polyphony += 1;
+
+                    if (current_polyphony > MIDI_MAX_POLYPHONY) && !already_warned {
+                        eprintln!(
+                            "warning: excessive polyphony at {:.2}s",
+                            ticks_to_seconds(event.ticks)
+                        );
+                        already_warned = true;
+                    }
+                }
+
+                if event.kind.is_note_off() {
+                    assert!(current_polyphony > 0);
+                    current_polyphony -= 1;
+
+                    if (current_polyphony <= MIDI_MAX_POLYPHONY) && already_warned {
+                        already_warned = false;
+                    }
+                }
+            }
+        }
 
         for (event_index, event) in absolute_track_events.iter().enumerate() {
             let delta_time = if event_index == 0 {
