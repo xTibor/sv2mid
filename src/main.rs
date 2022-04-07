@@ -1,5 +1,6 @@
 #![feature(io_read_to_string)]
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -343,6 +344,45 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     if (current_polyphony <= MIDI_MAX_POLYPHONY) && already_warned {
                         already_warned = false;
+                    }
+                }
+            }
+        }
+
+        {
+            let mut current_note_counts = HashMap::new();
+
+            for event in absolute_track_events.iter() {
+                if let TrackEventKind::Midi {
+                    channel,
+                    message: MidiMessage::NoteOn { key, .. },
+                } = event.kind
+                {
+                    let note_count = current_note_counts.entry((channel, key)).or_insert(0);
+                    *note_count += 1;
+
+                    if *note_count >= 2 {
+                        eprintln!(
+                            "warning: note overlap at {:.2}s",
+                            ticks_to_seconds(event.ticks)
+                        );
+                    }
+                }
+
+                if let TrackEventKind::Midi {
+                    channel,
+                    message: MidiMessage::NoteOff { key, .. },
+                } = event.kind
+                {
+                    let note_count = current_note_counts
+                        .get_mut(&(channel, key))
+                        .expect("failed to get note count");
+
+                    assert!(*note_count > 0);
+                    *note_count -= 1;
+
+                    if *note_count == 0 {
+                        current_note_counts.remove(&(channel, key));
                     }
                 }
             }
