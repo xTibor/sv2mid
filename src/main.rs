@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if !notes_layer.midi_name().is_ascii() {
                     eprintln!(
                         "warning: non-ASCII instrument name '{}'",
-                        notes_layer.midi_name(),
+                        notes_layer.midi_name().escape_default(),
                     );
                     eprintln!(
                         "note: these instrument names may be mishandled by other music software"
@@ -207,7 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if duration <= 1 {
                     eprintln!(
                         "warning: imploded note on layer '{}' at {:.2}s",
-                        notes_layer.midi_name(),
+                        notes_layer.midi_name().escape_default(),
                         offset_seconds
                     );
                 }
@@ -301,8 +301,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if !point.label.is_ascii() {
                     eprintln!(
                         "warning: non-ASCII label '{}' on text layer '{}' at {:.2}s",
-                        point.label,
-                        text_layer.midi_name(),
+                        point.label.escape_default(),
+                        text_layer.midi_name().escape_default(),
                         offset_seconds
                     );
                     eprintln!("note: these text events may be mishandled by other music software");
