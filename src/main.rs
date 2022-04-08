@@ -175,6 +175,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             (ticks as f64) / (midi_bpm / 60.0) / (MIDI_TICKS_PER_BEAT as f64)
         };
 
+        let format_seconds = |seconds: f64| -> String {
+            let h = (seconds / 3600.0) as usize;
+            let m = ((seconds % 3600.0) / 60.0) as usize;
+            let s = (seconds % 3600.0) % 60.0;
+
+            match (h, m, s) {
+                (0, m, s) => format!("{}:{:06.03}", m, s),
+                (h, m, s) => format!("{}:{:02}:{:06.03}", h, m, s),
+            }
+        };
+
         let mut absolute_track_events = Vec::new();
 
         absolute_track_events.extend(sv_notes_layers.iter().flat_map(|&(channel, notes_layer)| {
@@ -206,9 +217,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // than here.
                 if duration <= 1 {
                     eprintln!(
-                        "warning: imploded note on layer '{}' at {:.2}s",
+                        "warning: imploded note on layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
-                        offset_seconds
+                        format_seconds(offset_seconds)
                     );
                 }
 
@@ -300,10 +311,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 if !point.label.is_ascii() {
                     eprintln!(
-                        "warning: non-ASCII label '{}' on text layer '{}' at {:.2}s",
+                        "warning: non-ASCII label '{}' on text layer '{}' at {}",
                         point.label.escape_default(),
                         text_layer.midi_name().escape_default(),
-                        offset_seconds
+                        format_seconds(offset_seconds)
                     );
                     eprintln!("note: these text events may be mishandled by other music software");
                 }
@@ -331,8 +342,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     if (current_polyphony > MIDI_MAX_POLYPHONY) && !already_warned {
                         eprintln!(
-                            "warning: excessive polyphony at {:.2}s",
-                            ticks_to_seconds(event.ticks)
+                            "warning: excessive polyphony at {}",
+                            format_seconds(ticks_to_seconds(event.ticks))
                         );
                         already_warned = true;
                     }
@@ -363,8 +374,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     if *note_count >= 2 {
                         eprintln!(
-                            "warning: note overlap at {:.2}s",
-                            ticks_to_seconds(event.ticks)
+                            "warning: note overlap at {}",
+                            format_seconds(ticks_to_seconds(event.ticks))
                         );
                     }
                 }
