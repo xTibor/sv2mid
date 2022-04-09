@@ -210,6 +210,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
                 let length_seconds = (duration as f64) / (model.sample_rate as f64);
 
+                let ticks_note_on = seconds_to_ticks(offset_seconds);
+                let ticks_note_off = seconds_to_ticks(offset_seconds + length_seconds);
+                assert!(ticks_note_on <= ticks_note_off);
+
                 // There's a bug in Sonic Visualiser when accidentally right clicking
                 // while drawing notes it creates an additional imploded note next to the
                 // drawn note. These imploded notes fuck up MIDI import in DAWs.
@@ -217,7 +221,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // than here.
                 if duration <= 1 {
                     eprintln!(
-                        "warning: imploded note on layer '{}' at {}",
+                        "warning: imploded note on notes layer '{}' at {}",
+                        notes_layer.midi_name().escape_default(),
+                        format_seconds(offset_seconds)
+                    );
+                }
+
+                if ticks_note_on == ticks_note_off {
+                    eprintln!(
+                        "warning: insufficient resolution to represent MIDI note on notes layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
                         format_seconds(offset_seconds)
                     );
@@ -226,7 +238,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 [
                     // Note on event
                     AbsoluteTrackEvent {
-                        ticks: seconds_to_ticks(offset_seconds),
+                        ticks: ticks_note_on,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOn {
@@ -237,7 +249,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     },
                     // Note off event
                     AbsoluteTrackEvent {
-                        ticks: seconds_to_ticks(offset_seconds + length_seconds),
+                        ticks: ticks_note_off,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOff {
@@ -269,10 +281,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             dataset.points.iter().flat_map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
 
+                let ticks_note_on = seconds_to_ticks(offset_seconds);
+                let ticks_note_off = seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH;
+                assert!(ticks_note_on <= ticks_note_off);
+
+                if ticks_note_on == ticks_note_off {
+                    eprintln!(
+                        "warning: insufficient resolution to represent MIDI note on instants layer '{}' at {}",
+                        instants_layer.midi_name().escape_default(),
+                        format_seconds(offset_seconds)
+                    );
+                }
+
                 [
                     // Note on event
                     AbsoluteTrackEvent {
-                        ticks: seconds_to_ticks(offset_seconds),
+                        ticks: ticks_note_on,
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOn {
@@ -283,7 +307,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     },
                     // Note off event
                     AbsoluteTrackEvent {
-                        ticks: seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH,
+                        ticks: ticks_note_off,
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOff {
