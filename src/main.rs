@@ -164,6 +164,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         struct AbsoluteTrackEvent<'a> {
             ticks: usize,
+            ticks_event_start: usize,
             kind: TrackEventKind<'a>,
         }
 
@@ -239,6 +240,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note on event
                     AbsoluteTrackEvent {
                         ticks: ticks_note_on,
+                        ticks_event_start: ticks_note_on,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOn {
@@ -250,6 +252,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note off event
                     AbsoluteTrackEvent {
                         ticks: ticks_note_off,
+                        ticks_event_start: ticks_note_on,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOff {
@@ -297,6 +300,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note on event
                     AbsoluteTrackEvent {
                         ticks: ticks_note_on,
+                        ticks_event_start: ticks_note_on,
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOn {
@@ -308,6 +312,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note off event
                     AbsoluteTrackEvent {
                         ticks: ticks_note_off,
+                        ticks_event_start: ticks_note_on,
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOff {
@@ -333,6 +338,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             dataset.points.iter().map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
 
+                let text_ticks = seconds_to_ticks(offset_seconds);
+
                 if !point.label.is_ascii() {
                     eprintln!(
                         "warning: non-ASCII label '{}' on text layer '{}' at {}",
@@ -344,17 +351,28 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 AbsoluteTrackEvent {
-                    ticks: seconds_to_ticks(offset_seconds),
+                    ticks: text_ticks,
+                    ticks_event_start: text_ticks,
                     kind: TrackEventKind::Meta(MetaMessage::Text(point.label.as_bytes())),
                 }
             })
         }));
 
-        absolute_track_events.sort_by_key(|&AbsoluteTrackEvent { ticks, kind }| {
-            // Sort by time, then NoteOff -> NoteOn -> other events.
-            // TODO: This sorting key is not exhaustive, may cause reproducibility issues
-            (ticks, !kind.is_note_off(), !kind.is_note_on())
-        });
+        absolute_track_events.sort_by_key(
+            |&AbsoluteTrackEvent {
+                 ticks,
+                 ticks_event_start,
+                 kind,
+             }| {
+                // TODO: This sorting key is not exhaustive, may cause reproducibility issues
+                (
+                    ticks,
+                    ticks_event_start,
+                    !kind.is_note_on(),
+                    !kind.is_note_off(),
+                )
+            },
+        );
 
         {
             let mut current_polyphony = 0;
