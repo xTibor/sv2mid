@@ -2,22 +2,16 @@ use std::error::Error;
 use std::str::FromStr;
 
 pub fn format_seconds(value: f64) -> String {
-    trait DivRem {
-        fn div_rem(&self, div: Self) -> (usize, Self);
-    }
-
-    impl DivRem for f64 {
-        fn div_rem(&self, div: f64) -> (usize, f64) {
-            ((*self / div) as usize, *self % div)
-        }
+    fn div_rem(value: f64, div: usize) -> (usize, f64) {
+        ((value / (div as f64)) as usize, value % (div as f64))
     }
 
     let sign = if value.is_sign_negative() { '-' } else { '+' };
 
     let value = value.abs();
-    let (d, value) = value.div_rem(86400.0);
-    let (h, value) = value.div_rem(3600.0);
-    let (m, s) = value.div_rem(60.0);
+    let (d, value) = div_rem(value, 86400);
+    let (h, value) = div_rem(value, 3600);
+    let (m, s) = div_rem(value, 60);
 
     match (d, h, m, s) {
         (0, 0, m, s) => format!("{}{}:{:06.03}", sign, m, s),
