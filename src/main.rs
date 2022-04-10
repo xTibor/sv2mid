@@ -216,13 +216,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 assert!(ticks_note_on <= ticks_note_off);
 
                 // There's a bug in Sonic Visualiser when accidentally right clicking
-                // while drawing notes it creates an additional imploded note next to the
-                // drawn note. These imploded notes fuck up MIDI import in DAWs.
+                // while drawing notes it creates an additional collapsed note next to the
+                // drawn note. These collapsed notes fuck up MIDI import in DAWs.
                 // Just warn about these issues, better fix them in the source project
                 // than here.
                 if duration <= 1 {
                     eprintln!(
-                        "warning: imploded note on notes layer '{}' at {}",
+                        "warning: collapsed note on notes layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
                         format_seconds(offset_seconds)
                     );
