@@ -1,17 +1,17 @@
 use std::error::Error;
 use std::str::FromStr;
 
-pub trait DivRem {
-    fn div_rem(&self, div: Self) -> (usize, Self);
-}
-
-impl DivRem for f64 {
-    fn div_rem(&self, div: f64) -> (usize, f64) {
-        ((*self / div) as usize, *self % div)
-    }
-}
-
 pub fn format_seconds(value: f64) -> String {
+    trait DivRem {
+        fn div_rem(&self, div: Self) -> (usize, Self);
+    }
+
+    impl DivRem for f64 {
+        fn div_rem(&self, div: f64) -> (usize, f64) {
+            ((*self / div) as usize, *self % div)
+        }
+    }
+
     let sign = if value.is_sign_negative() { '-' } else { '+' };
 
     let value = value.abs();
