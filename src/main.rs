@@ -159,25 +159,46 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         // TODO: Drum channel initialization
-        // The drum channel is constructed by merging multiple time instant layers.
-        // It's not obvious how should channel volume/panning be initialized.
-        // I'm leaving it as default for now.
+        // The drum channel is constructed by merging multiple time instant
+        // layers. It's not obvious how should channel volume/panning be
+        // initialized. I'm leaving it as default for now.
     }
 
     // Emitting MIDI track data
     {
         struct AbsoluteTrackEvent<'a> {
+            /// Absolute MIDI position of the event.
             ticks: usize,
+
+            /// Absolute MIDI position when the note/event has actually been
+            /// started (the corresponding NoteOn event for NoteOff events).
+            /// Only used as an additional sorting key when preparing events for
+            /// delta-encoding and linting (overlaps, excessive polyphony).
+            ///
+            /// This field has been introduced for properly resolving that case
+            /// when a note stops at the same moment when a new one starts.
+            /// Event sorting must ensure that the NoteOn event of Note#2 must
+            /// not preceed the NoteOff event of Note#1 for obvious reasons.
+            /// ```
+            /// Time   |-1- - - - -2- - - - -3-|
+            ///        |           V           |
+            /// Note#1 | [=========]           |
+            /// Note#2 |           [=========] |
+            /// ```
             ticks_event_start: usize,
+
+            /// The position of the event in seconds, used for error reporting.
+            /// This field has been introduced because the "Sonic Visualiser
+            /// seconds"->"MIDI ticks" conversion is lossy and caused extreme
+            /// precision loss at the error message timestamps in some cases.
+            seconds: f64,
+
+            /// MIDI event data.
             kind: TrackEventKind<'a>,
         }
 
         let seconds_to_ticks = |seconds: f64| -> usize {
             (seconds * (args.bpm / 60.0) * (MIDI_TICKS_PER_BEAT as f64)) as usize
-        };
-
-        let ticks_to_seconds = |ticks: usize| -> f64 {
-            (ticks as f64) / (args.bpm / 60.0) / (MIDI_TICKS_PER_BEAT as f64)
         };
 
         let mut absolute_track_events = Vec::new();
@@ -234,6 +255,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: ticks_note_on,
                         ticks_event_start: ticks_note_on,
+                        seconds: offset_seconds,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOn {
@@ -246,6 +268,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: ticks_note_off,
                         ticks_event_start: ticks_note_on,
+                        seconds: offset_seconds + length_seconds,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOff {
@@ -294,6 +317,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: ticks_note_on,
                         ticks_event_start: ticks_note_on,
+                        seconds: offset_seconds,
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOn {
@@ -306,6 +330,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: ticks_note_off,
                         ticks_event_start: ticks_note_on,
+                        seconds: offset_seconds, // Instants are zero-length, this is okay.
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOff {
@@ -346,6 +371,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 AbsoluteTrackEvent {
                     ticks: text_ticks,
                     ticks_event_start: text_ticks,
+                    seconds: offset_seconds,
                     kind: TrackEventKind::Meta(MetaMessage::Text(point.label.as_bytes())),
                 }
             })
@@ -356,6 +382,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                  ticks,
                  ticks_event_start,
                  kind,
+                 ..
              }| {
                 // TODO: This sorting key is not exhaustive, may cause reproducibility issues
                 (
@@ -378,7 +405,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if (current_polyphony > MIDI_MAX_POLYPHONY) && !already_warned {
                         eprintln!(
                             "warning: excessive polyphony at {}",
-                            format_seconds(ticks_to_seconds(event.ticks))
+                            format_seconds(event.seconds)
                         );
                         already_warned = true;
                     }
@@ -408,10 +435,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     *note_count += 1;
 
                     if *note_count >= 2 {
-                        eprintln!(
-                            "warning: note overlap at {}",
-                            format_seconds(ticks_to_seconds(event.ticks))
-                        );
+                        eprintln!("warning: note overlap at {}", format_seconds(event.seconds));
                     }
                 }
 
