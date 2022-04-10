@@ -223,8 +223,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .duration
                     .expect("notes layer point has no duration specified");
 
-                let offset_seconds = Seconds((point.frame as f64) / (model.sample_rate as f64));
-                let length_seconds = Seconds((duration as f64) / (model.sample_rate as f64));
+                let offset_seconds = Seconds::new(point.frame, model.sample_rate);
+                let length_seconds = Seconds::new(duration, model.sample_rate);
 
                 let ticks_note_on = seconds_to_ticks(offset_seconds);
                 let ticks_note_off = seconds_to_ticks(offset_seconds + length_seconds);
@@ -299,7 +299,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let key = play_parameters.midi_drum_note();
 
             dataset.points.iter().flat_map(move |point| {
-                let offset_seconds = Seconds((point.frame as f64) / (model.sample_rate as f64));
+                let offset_seconds = Seconds::new(point.frame, model.sample_rate);
 
                 assert!(args.midi_ticks_per_beat > 0);
                 let length_ticks = args.midi_ticks_per_beat / 4; // Expand the zero-length instants into 1/32 MIDI notes
@@ -358,7 +358,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .expect("dataset doesn't exist");
 
             dataset.points.iter().map(move |point| {
-                let offset_seconds = Seconds((point.frame as f64) / (model.sample_rate as f64));
+                let offset_seconds = Seconds::new(point.frame, model.sample_rate);
 
                 let text_ticks = seconds_to_ticks(offset_seconds);
 

@@ -6,6 +6,13 @@ use std::str::FromStr;
 #[derive(Debug, Copy, Clone)]
 pub struct Seconds(pub f64);
 
+impl Seconds {
+    pub fn new(frame: usize, sample_rate: usize) -> Seconds {
+        assert!(sample_rate > 0);
+        Seconds(frame as f64 / sample_rate as f64)
+    }
+}
+
 impl fmt::Display for Seconds {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fn div_rem(value: f64, div: usize) -> (usize, f64) {
