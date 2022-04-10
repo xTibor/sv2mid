@@ -19,10 +19,7 @@ use crate::sv_model::SvDocument;
 mod midly_ext;
 use crate::midly_ext::TrackEventKindExt;
 
-const MIDI_TICKS_PER_BEAT: usize = 1024;
-
 const MIDI_DRUM_CHANNEL: u8 = 9;
-const MIDI_DRUM_NOTE_LENGTH: usize = MIDI_TICKS_PER_BEAT / 4;
 
 const MIDI_VELOCITY_DEFAULT: u8 = 64;
 const MIDI_VELOCITY_NONE: u8 = 0;
@@ -44,7 +41,11 @@ struct Args {
 
     /// Fixed MIDI tempo used for exporting
     #[clap(short = 't', long, default_value = "120.0", parse(try_from_str = parse_positive_literal))]
-    bpm: f64,
+    midi_bpm: f64,
+
+    /// Number of MIDI ticks per beat
+    #[clap(short = 'x', long, default_value = "1024", parse(try_from_str = parse_positive_literal))]
+    midi_ticks_per_beat: usize,
 
     /// Trim the leading silence before the first note
     #[clap(short = 's', long)]
@@ -74,19 +75,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut midi_document = Smf::new(Header::new(
         Format::SingleTrack,
-        Timing::Metrical(u15::from(MIDI_TICKS_PER_BEAT as u16)),
+        Timing::Metrical(u15::from(args.midi_ticks_per_beat as u16)),
     ));
 
     let mut midi_track = Track::new();
 
     // MIDI track initialization
     {
-        assert!(args.bpm > 0.0);
+        assert!(args.midi_bpm > 0.0);
 
         midi_track.push(TrackEvent {
             delta: u28::from(0),
             kind: TrackEventKind::Meta(MetaMessage::Tempo(u24::from(
-                (60_000_000.0 / args.bpm) as u32,
+                (60_000_000.0 / args.midi_bpm) as u32,
             ))),
         });
 
@@ -198,7 +199,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         let seconds_to_ticks = |seconds: f64| -> usize {
-            (seconds * (args.bpm / 60.0) * (MIDI_TICKS_PER_BEAT as f64)) as usize
+            (seconds * (args.midi_bpm / 60.0) * (args.midi_ticks_per_beat as f64)) as usize
         };
 
         let mut absolute_track_events = Vec::new();
@@ -300,8 +301,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             dataset.points.iter().flat_map(move |point| {
                 let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
 
+                assert!(args.midi_ticks_per_beat > 0);
+                let length_ticks = args.midi_ticks_per_beat / 4; // Expand the zero-length instants into 1/32 MIDI notes
+
                 let ticks_note_on = seconds_to_ticks(offset_seconds);
-                let ticks_note_off = seconds_to_ticks(offset_seconds) + MIDI_DRUM_NOTE_LENGTH;
+                let ticks_note_off = seconds_to_ticks(offset_seconds) + length_ticks;
                 assert!(ticks_note_on <= ticks_note_off);
 
                 if ticks_note_on == ticks_note_off {
