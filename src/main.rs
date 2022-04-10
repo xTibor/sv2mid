@@ -11,7 +11,7 @@ use midly::{
 };
 
 mod utils;
-use crate::utils::format_seconds;
+use crate::utils::{format_seconds, parse_positive_literal};
 
 mod sv_model;
 use crate::sv_model::SvDocument;
@@ -43,8 +43,8 @@ struct Args {
     midi_output_path: PathBuf,
 
     /// Fixed MIDI tempo used for exporting
-    #[clap(short = 't', long)]
-    tempo: Option<f64>,
+    #[clap(short = 't', long, default_value = "120.0", parse(try_from_str = parse_positive_literal))]
+    bpm: f64,
 
     /// Trim the leading silence before the first note
     #[clap(short = 's', long)]
@@ -77,15 +77,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         Timing::Metrical(u15::from(MIDI_TICKS_PER_BEAT as u16)),
     ));
 
-    let midi_bpm = args.tempo.unwrap_or(120.0);
     let mut midi_track = Track::new();
 
     // MIDI track initialization
     {
+        assert!(args.bpm > 0.0);
+
         midi_track.push(TrackEvent {
             delta: u28::from(0),
             kind: TrackEventKind::Meta(MetaMessage::Tempo(u24::from(
-                (60_000_000.0 / midi_bpm) as u32,
+                (60_000_000.0 / args.bpm) as u32,
             ))),
         });
 
@@ -172,11 +173,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         let seconds_to_ticks = |seconds: f64| -> usize {
-            (seconds * (midi_bpm / 60.0) * (MIDI_TICKS_PER_BEAT as f64)) as usize
+            (seconds * (args.bpm / 60.0) * (MIDI_TICKS_PER_BEAT as f64)) as usize
         };
 
         let ticks_to_seconds = |ticks: usize| -> f64 {
-            (ticks as f64) / (midi_bpm / 60.0) / (MIDI_TICKS_PER_BEAT as f64)
+            (ticks as f64) / (args.bpm / 60.0) / (MIDI_TICKS_PER_BEAT as f64)
         };
 
         let mut absolute_track_events = Vec::new();
