@@ -11,6 +11,12 @@ impl Seconds {
         assert!(sample_rate > 0);
         Seconds(frame as f64 / sample_rate as f64)
     }
+
+    pub fn as_midi_ticks(&self, midi_bpm: f64, midi_ticks_per_beat: usize) -> usize {
+        assert!(midi_bpm > 0.0);
+        assert!(midi_ticks_per_beat > 0);
+        (self.0 * (midi_bpm / 60.0) * (midi_ticks_per_beat as f64)) as usize
+    }
 }
 
 impl fmt::Display for Seconds {

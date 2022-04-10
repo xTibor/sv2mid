@@ -198,10 +198,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             kind: TrackEventKind<'a>,
         }
 
-        let seconds_to_ticks = |seconds: Seconds| -> usize {
-            (seconds.0 * (args.midi_bpm / 60.0) * (args.midi_ticks_per_beat as f64)) as usize
-        };
-
         let mut absolute_track_events = Vec::new();
 
         absolute_track_events.extend(sv_notes_layers.iter().flat_map(|&(channel, notes_layer)| {
@@ -226,8 +222,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let offset_seconds = Seconds::new(point.frame, model.sample_rate);
                 let length_seconds = Seconds::new(duration, model.sample_rate);
 
-                let ticks_note_on = seconds_to_ticks(offset_seconds);
-                let ticks_note_off = seconds_to_ticks(offset_seconds + length_seconds);
+                let ticks_note_on = offset_seconds.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
+                let ticks_note_off = (offset_seconds + length_seconds).as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
                 assert!(ticks_note_on <= ticks_note_off);
 
                 // There's a bug in Sonic Visualiser when accidentally right clicking
@@ -304,8 +300,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 assert!(args.midi_ticks_per_beat > 0);
                 let length_ticks = args.midi_ticks_per_beat / 4; // Expand the zero-length instants into 1/32 MIDI notes
 
-                let ticks_note_on = seconds_to_ticks(offset_seconds);
-                let ticks_note_off = seconds_to_ticks(offset_seconds) + length_ticks;
+                let ticks_note_on = offset_seconds.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
+                let ticks_note_off = ticks_note_on + length_ticks;
                 assert!(ticks_note_on <= ticks_note_off);
 
                 if ticks_note_on == ticks_note_off {
@@ -360,7 +356,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             dataset.points.iter().map(move |point| {
                 let offset_seconds = Seconds::new(point.frame, model.sample_rate);
 
-                let text_ticks = seconds_to_ticks(offset_seconds);
+                let text_ticks =
+                    offset_seconds.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
 
                 if !point.label.is_ascii() {
                     eprintln!(
