@@ -10,6 +10,9 @@ use midly::{
     Format, Header, MetaMessage, MidiMessage, Smf, Timing, Track, TrackEvent, TrackEventKind,
 };
 
+mod utils;
+use crate::utils::format_seconds;
+
 mod sv_model;
 use crate::sv_model::SvDocument;
 
@@ -174,19 +177,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let ticks_to_seconds = |ticks: usize| -> f64 {
             (ticks as f64) / (midi_bpm / 60.0) / (MIDI_TICKS_PER_BEAT as f64)
-        };
-
-        let format_seconds = |seconds: f64| -> String {
-            let sign = if seconds.is_sign_negative() { '-' } else { '+' };
-
-            let h = (seconds.abs() / 3600.0) as usize;
-            let m = ((seconds.abs() % 3600.0) / 60.0) as usize;
-            let s = (seconds.abs() % 3600.0) % 60.0;
-
-            match (h, m, s) {
-                (0, m, s) => format!("{}{}:{:06.03}", sign, m, s),
-                (h, m, s) => format!("{}{}:{:02}:{:06.03}", sign, h, m, s),
-            }
         };
 
         let mut absolute_track_events = Vec::new();
