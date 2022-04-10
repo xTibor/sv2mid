@@ -177,13 +177,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         let format_seconds = |seconds: f64| -> String {
-            let h = (seconds / 3600.0) as usize;
-            let m = ((seconds % 3600.0) / 60.0) as usize;
-            let s = (seconds % 3600.0) % 60.0;
+            let sign = if seconds.is_sign_negative() { '-' } else { '+' };
+
+            let h = (seconds.abs() / 3600.0) as usize;
+            let m = ((seconds.abs() % 3600.0) / 60.0) as usize;
+            let s = (seconds.abs() % 3600.0) % 60.0;
 
             match (h, m, s) {
-                (0, m, s) => format!("{}:{:06.03}", m, s),
-                (h, m, s) => format!("{}:{:02}:{:06.03}", h, m, s),
+                (0, m, s) => format!("{}{}:{:06.03}", sign, m, s),
+                (h, m, s) => format!("{}{}:{:02}:{:06.03}", sign, h, m, s),
             }
         };
 
