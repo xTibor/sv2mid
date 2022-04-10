@@ -11,7 +11,7 @@ use midly::{
 };
 
 mod utils;
-use crate::utils::{format_seconds, parse_positive_literal};
+use crate::utils::{parse_positive_literal, Seconds};
 
 mod sv_model;
 use crate::sv_model::SvDocument;
@@ -192,14 +192,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             /// This field has been introduced because the "Sonic Visualiser
             /// seconds"->"MIDI ticks" conversion is lossy and caused extreme
             /// precision loss at the error message timestamps in some cases.
-            seconds: f64,
+            seconds: Seconds,
 
             /// MIDI event data.
             kind: TrackEventKind<'a>,
         }
 
-        let seconds_to_ticks = |seconds: f64| -> usize {
-            (seconds * (args.midi_bpm / 60.0) * (args.midi_ticks_per_beat as f64)) as usize
+        let seconds_to_ticks = |seconds: Seconds| -> usize {
+            (seconds.0 * (args.midi_bpm / 60.0) * (args.midi_ticks_per_beat as f64)) as usize
         };
 
         let mut absolute_track_events = Vec::new();
@@ -223,8 +223,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .duration
                     .expect("notes layer point has no duration specified");
 
-                let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
-                let length_seconds = (duration as f64) / (model.sample_rate as f64);
+                let offset_seconds = Seconds((point.frame as f64) / (model.sample_rate as f64));
+                let length_seconds = Seconds((duration as f64) / (model.sample_rate as f64));
 
                 let ticks_note_on = seconds_to_ticks(offset_seconds);
                 let ticks_note_off = seconds_to_ticks(offset_seconds + length_seconds);
@@ -239,7 +239,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: collapsed note on notes layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
-                        format_seconds(offset_seconds)
+                        offset_seconds
                     );
                 }
 
@@ -247,7 +247,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: insufficient resolution to represent MIDI note on notes layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
-                        format_seconds(offset_seconds)
+                        offset_seconds
                     );
                 }
 
@@ -299,7 +299,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let key = play_parameters.midi_drum_note();
 
             dataset.points.iter().flat_map(move |point| {
-                let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
+                let offset_seconds = Seconds((point.frame as f64) / (model.sample_rate as f64));
 
                 assert!(args.midi_ticks_per_beat > 0);
                 let length_ticks = args.midi_ticks_per_beat / 4; // Expand the zero-length instants into 1/32 MIDI notes
@@ -312,7 +312,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: insufficient resolution to represent MIDI note on instants layer '{}' at {}",
                         instants_layer.midi_name().escape_default(),
-                        format_seconds(offset_seconds)
+                        offset_seconds
                     );
                 }
 
@@ -358,7 +358,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .expect("dataset doesn't exist");
 
             dataset.points.iter().map(move |point| {
-                let offset_seconds = (point.frame as f64) / (model.sample_rate as f64);
+                let offset_seconds = Seconds((point.frame as f64) / (model.sample_rate as f64));
 
                 let text_ticks = seconds_to_ticks(offset_seconds);
 
@@ -367,7 +367,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         "warning: non-ASCII label '{}' on text layer '{}' at {}",
                         point.label.escape_default(),
                         text_layer.midi_name().escape_default(),
-                        format_seconds(offset_seconds)
+                        offset_seconds
                     );
                     eprintln!("note: these text events may be mishandled by other music software");
                 }
@@ -407,10 +407,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     current_polyphony += 1;
 
                     if (current_polyphony > MIDI_MAX_POLYPHONY) && !already_warned {
-                        eprintln!(
-                            "warning: excessive polyphony at {}",
-                            format_seconds(event.seconds)
-                        );
+                        eprintln!("warning: excessive polyphony at {}", event.seconds);
                         already_warned = true;
                     }
                 }
@@ -439,7 +436,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     *note_count += 1;
 
                     if *note_count >= 2 {
-                        eprintln!("warning: note overlap at {}", format_seconds(event.seconds));
+                        eprintln!("warning: note overlap at {}", event.seconds);
                     }
                 }
 
