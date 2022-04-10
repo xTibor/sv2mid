@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::fmt;
-use std::ops::Add;
 use std::str::FromStr;
 
 #[derive(Debug, Copy, Clone)]
@@ -37,14 +36,6 @@ impl fmt::Display for Seconds {
             (0, h, m, s) => write!(f, "{}{}:{:02}:{:06.03}", sign, h, m, s),
             (d, h, m, s) => write!(f, "{}{}:{:02}:{:02}:{:06.03}", sign, d, h, m, s),
         }
-    }
-}
-
-impl Add<Seconds> for Seconds {
-    type Output = Seconds;
-
-    fn add(self, rhs: Seconds) -> Self::Output {
-        Seconds(self.0 + rhs.0)
     }
 }
 

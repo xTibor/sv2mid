@@ -219,11 +219,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .duration
                     .expect("notes layer point has no duration specified");
 
-                let offset_seconds = Seconds::new(point.frame, model.sample_rate);
-                let length_seconds = Seconds::new(duration, model.sample_rate);
+                let seconds_note_on = Seconds::new(point.frame, model.sample_rate);
+                let seconds_note_off = Seconds::new(point.frame + duration, model.sample_rate);
 
-                let ticks_note_on = offset_seconds.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
-                let ticks_note_off = (offset_seconds + length_seconds).as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
+                let ticks_note_on = seconds_note_on.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
+                let ticks_note_off = seconds_note_off.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
                 assert!(ticks_note_on <= ticks_note_off);
 
                 // There's a bug in Sonic Visualiser when accidentally right clicking
@@ -235,7 +235,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: collapsed note on notes layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
-                        offset_seconds
+                        seconds_note_on
                     );
                 }
 
@@ -243,7 +243,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: insufficient resolution to represent MIDI note on notes layer '{}' at {}",
                         notes_layer.midi_name().escape_default(),
-                        offset_seconds
+                        seconds_note_on
                     );
                 }
 
@@ -252,7 +252,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: ticks_note_on,
                         ticks_event_start: ticks_note_on,
-                        seconds: offset_seconds,
+                        seconds: seconds_note_on,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOn {
@@ -264,8 +264,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note off event
                     AbsoluteTrackEvent {
                         ticks: ticks_note_off,
-                        ticks_event_start: ticks_note_on,
-                        seconds: offset_seconds + length_seconds,
+                        ticks_event_start: ticks_note_on, // Not a typo
+                        seconds: seconds_note_off,
                         kind: TrackEventKind::Midi {
                             channel,
                             message: MidiMessage::NoteOff {
@@ -295,12 +295,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             let key = play_parameters.midi_drum_note();
 
             dataset.points.iter().flat_map(move |point| {
-                let offset_seconds = Seconds::new(point.frame, model.sample_rate);
+                let seconds_note_on = Seconds::new(point.frame, model.sample_rate);
 
                 assert!(args.midi_ticks_per_beat > 0);
                 let length_ticks = args.midi_ticks_per_beat / 4; // Expand the zero-length instants into 1/32 MIDI notes
 
-                let ticks_note_on = offset_seconds.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
+                let ticks_note_on = seconds_note_on.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
                 let ticks_note_off = ticks_note_on + length_ticks;
                 assert!(ticks_note_on <= ticks_note_off);
 
@@ -308,7 +308,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: insufficient resolution to represent MIDI note on instants layer '{}' at {}",
                         instants_layer.midi_name().escape_default(),
-                        offset_seconds
+                        seconds_note_on
                     );
                 }
 
@@ -317,7 +317,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     AbsoluteTrackEvent {
                         ticks: ticks_note_on,
                         ticks_event_start: ticks_note_on,
-                        seconds: offset_seconds,
+                        seconds: seconds_note_on,
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOn {
@@ -329,8 +329,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // Note off event
                     AbsoluteTrackEvent {
                         ticks: ticks_note_off,
-                        ticks_event_start: ticks_note_on,
-                        seconds: offset_seconds, // Instants are zero-length, this is okay.
+                        ticks_event_start: ticks_note_on, // Not a typo
+                        seconds: seconds_note_on, // Instants are zero-length, this is okay.
                         kind: TrackEventKind::Midi {
                             channel: u4::from(MIDI_DRUM_CHANNEL),
                             message: MidiMessage::NoteOff {
@@ -354,25 +354,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .expect("dataset doesn't exist");
 
             dataset.points.iter().map(move |point| {
-                let offset_seconds = Seconds::new(point.frame, model.sample_rate);
+                let seconds_text = Seconds::new(point.frame, model.sample_rate);
 
-                let text_ticks =
-                    offset_seconds.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
+                let ticks_text =
+                    seconds_text.as_midi_ticks(args.midi_bpm, args.midi_ticks_per_beat);
 
                 if !point.label.is_ascii() {
                     eprintln!(
                         "warning: non-ASCII label '{}' on text layer '{}' at {}",
                         point.label.escape_default(),
                         text_layer.midi_name().escape_default(),
-                        offset_seconds
+                        seconds_text
                     );
                     eprintln!("note: these text events may be mishandled by other music software");
                 }
 
                 AbsoluteTrackEvent {
-                    ticks: text_ticks,
-                    ticks_event_start: text_ticks,
-                    seconds: offset_seconds,
+                    ticks: ticks_text,
+                    ticks_event_start: ticks_text,
+                    seconds: seconds_text,
                     kind: TrackEventKind::Meta(MetaMessage::Text(point.label.as_bytes())),
                 }
             })
